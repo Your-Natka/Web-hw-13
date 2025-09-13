@@ -1,10 +1,33 @@
-fastapi
-uvicorn[standard]
-psycopg2-binary
-sqlalchemy
-pydantic
-email-validator
-python-jose[cryptography]
-passlib[bcrypt]
-python-multipart
-pydantic[email]
+# Framework
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+
+# Database
+sqlalchemy==2.0.34
+alembic==1.13.2
+psycopg2-binary==2.9.9
+python-dotenv==1.0.1
+
+# Auth & Security
+passlib[bcrypt]==1.7.4
+python-jose[cryptography]==3.3.0
+
+# Email verification
+fastapi-mail==1.4.1
+
+# Rate limiting
+slowapi==0.1.9
+
+# CORS (через starlette, вже в fastapi, але вкажемо явно)
+starlette==0.38.5
+
+# Cloudinary (аватари)
+cloudinary==1.41.0
+
+# Redis (кешування)
+redis==5.0.8
+aioredis==2.0.1
+
+# Testing
+pytest==8.3.3
+httpx==0.27.2

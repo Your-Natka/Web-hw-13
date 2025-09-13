@@ -1,15 +1,28 @@
-from fastapi import FastAPI, Depends, HTTPException, Request, status
+from fastapi import FastAPI, Depends, HTTPException, Request, status, File, UploadFile
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from fastapi.security import OAuth2PasswordRequestForm
-
+from slowapi.middleware import SlowAPIMiddleware
+from fastapi.middleware.cors import CORSMiddleware
+from app.rate_limit import limiter
+from jose import jwt, JWTError
 from app import models, schemas, crud
 from app.database import engine, SessionLocal, Base 
 from app import auth
+from slowapi.util import get_remote_address
 
 app = FastAPI(title="Contacts API")
+app.state.limiter = limiter
+app.add_middleware(SlowAPIMiddleware)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],  # або ["*"] для тестування
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Створюємо таблиці (тільки один раз)
 Base.metadata.create_all(bind=engine)
@@ -81,10 +94,53 @@ def refresh_token(payload: dict, db: Session = Depends(get_db)):
     new_refresh = auth.create_refresh_token(subject=user.id)
     return {"access_token": new_access, "token_type": "bearer", "refresh_token": new_refresh}
 
+@app.get("/auth/verify")
+def verify_email(token: str, db: Session = Depends(get_db)):
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        if payload.get("action") != "verify":
+            raise HTTPException(status_code=400, detail="Invalid token")
+        user_id = int(payload.get("sub"))
+    except JWTError:
+        raise HTTPException(status_code=400, detail="Invalid or expired token")
+    user = crud.get_user(db, user_id)
+    if not user:
+        raise HTTPException(status_code=404)
+    user.is_verified = True
+    db.commit()
+    return {"message": "Email verified"}
+
+@app.post("/auth/reset/confirm")
+def reset_confirm(token: str, new_password: str, db: Session = Depends(get_db)):
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        if payload.get("action") != "reset":
+            raise HTTPException(status_code=400)
+        user_id = int(payload.get("sub"))
+    except JWTError:
+        raise HTTPException(status_code=400, detail="Invalid or expired token")
+    user = crud.get_user(db, user_id)
+    if not user:
+        raise HTTPException(status_code=404)
+    user.hashed_password = crud.get_password_hash(new_password)
+    db.commit()
+    # optional: delete redis cache
+    redis_cache.delete_cached_user(user.id)
+    return {"message": "Password updated"}
+
+@app.post("/users/me/avatar", response_model=schemas.UserOut)
+def upload_avatar(file: UploadFile = File(...), db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_user)):
+    url = cloudinary_utils.upload_avatar(file)
+    current_user.avatar_url = url
+    db.commit()
+    db.refresh(current_user)
+    return current_user
+
 # Захищені CRUD операції для контактів
 # CONTACTS CRUD
 # CREATE
 @app.post("/contacts/", response_model=schemas.ContactOut, status_code=status.HTTP_201_CREATED)
+@limiter.limit("5/minute", key_func=lambda request: request.state.user_key)
 def create_contact(
     contact: schemas.ContactCreate,
     db: Session = Depends(get_db),
@@ -113,7 +169,6 @@ def read_contacts(
     current_user: models.User = Depends(auth.get_current_user),
 ):
     return crud.get_contacts(db, owner_id=current_user.id, skip=skip, limit=limit)
-
 
 # UPDATE (PUT — повне оновлення)
 @app.put("/contacts/{contact_id}", response_model=schemas.ContactOut)
@@ -165,3 +220,8 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
             "body": str(exc.body)  # перетворюємо bytes у str
         },
     )
+    
+# обробка помилок
+@app.exception_handler(RateLimitExceeded)
+def rate_limit_handler(request, exc):
+    return JSONResponse(status_code=429, content={"detail": "Rate limit exceeded"})

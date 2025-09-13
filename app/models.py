@@ -17,7 +17,8 @@ class User(Base):
     id = Column(Integer, primary_key=True, index=True)
     email = Column(String(255), unique=True, nullable=False, index=True)
     hashed_password = Column(String, nullable=False)
-    is_active = Column(Boolean, default=True)
+    is_verified = Column(Boolean, default=False)
+    avatar_url = Column(String, nullable=True)
 
     contacts = relationship("Contact", back_populates="owner", cascade="all, delete-orphan")
 
@@ -26,14 +27,11 @@ class Contact(Base):
     __tablename__ = "contacts"
 
     id = Column(Integer, primary_key=True, index=True)
-    first_name = Column(String(50), nullable=False, index=True)
-    last_name = Column(String(50), nullable=False, index=True)
-    email = Column(String(255), unique=True, nullable=False, index=True)
-    phone = Column(String(20), unique=True, nullable=True, index=True)
-    preferred_contact_method = Column(String(10), default="email", index=True)
-    sent = Column(Boolean, default=False)
+    first_name = Column(String(50), nullable=False)
+    last_name = Column(String(50), nullable=False)
+    email = Column(String(255), nullable=True)
+    phone = Column(String(20), nullable=True)
     birthday = Column(Date, nullable=True)
     additional_info = Column(String(500), nullable=True)
-    
     owner_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     owner = relationship("User", back_populates="contacts")

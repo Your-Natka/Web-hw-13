@@ -6,6 +6,7 @@ from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 from app import crud, schemas
 from app.database import SessionLocal
+from app.config import SECRET_KEY, ALGORITHM
 
 # налаштування (для навчання — зберігаємо у файлі; в проді — з env)
 SECRET_KEY = "supersecret_your_key_change_me"   # поміняй на довгий випадковий рядок
@@ -28,6 +29,10 @@ def create_refresh_token(subject: str | int, expires_delta: Optional[timedelta] 
     to_encode.update({"exp": expire})
     encoded = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded
+
+def create_verification_token(user_id: int, expires_minutes: int = 24*60):
+    to_encode = {"sub": str(user_id), "action": "verify", "exp": datetime.utcnow() + timedelta(minutes=expires_minutes)}
+    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
 def get_db():
     db = SessionLocal()
