@@ -1,74 +1,55 @@
 from pydantic import BaseModel, EmailStr
 from typing import Optional
-from datetime import date
+from datetime import datetime
 
-# --- ITEMS ---
-class ItemBase(BaseModel):
-    title: str
-    description: Optional[str] = None
+class UserCreate(BaseModel):
+    email: EmailStr
+    password: str
+    username: Optional[str] = None
 
-class ItemCreate(ItemBase):
-    pass
-
-class ItemOut(ItemBase):
+class UserOut(BaseModel):
     id: int
+    email: EmailStr
+    username: Optional[str]
+    is_verified: bool
+    avatar_url: Optional[str]
+    created_at: datetime
 
-    model_config = {
-        "from_attributes": True
-    }
+    class Config:
+        from_attributes = True
 
-# USERS / AUTH
-class UserBase(BaseModel):
+class AvatarUpdate(BaseModel):
+    avatar_url: str
+
+class EmailVerification(BaseModel):
+    email: EmailStr
+    token: str
+
+class PasswordResetRequest(BaseModel):
     email: EmailStr
 
-class UserCreate(UserBase):
-    password: str
+class PasswordResetConfirm(BaseModel):
+    token: str
+    new_password: str
 
-class UserOut(UserBase):
-    id: int
-    is_active: bool
-    class Config:
-        orm_mode = True
-
-# TOKENS
-class Token(BaseModel):
-    access_token: str
-    token_type: str
-    refresh_token: Optional[str] = None
-
-class TokenPayload(BaseModel):
-    sub: Optional[int] = None
-
-# CONTACTS 
 class ContactBase(BaseModel):
-    first_name: str
-    last_name: str
+    name: str
     email: EmailStr
     phone: Optional[str] = None
-    preferred_contact_method: Optional[str] = "email"
-    sent: Optional[bool] = False
-    birthday: Optional[date] = None
-    additional_info: Optional[str] = None
+    address: Optional[str] = None
 
 class ContactCreate(ContactBase):
-    pass  # все вже є в ContactBase
-
+    pass
 
 class ContactUpdate(BaseModel):
-    first_name: Optional[str] = None
-    last_name: Optional[str] = None
+    name: Optional[str] = None
     email: Optional[EmailStr] = None
     phone: Optional[str] = None
-    preferred_contact_method: Optional[str] = None
-    sent: Optional[bool] = None
-    birthday: Optional[date] = None
-    additional_info: Optional[str] = None
-
+    address: Optional[str] = None
 
 class ContactOut(ContactBase):
     id: int
     owner_id: int
 
-    model_config = {
-        "from_attributes": True
-    }
+    class Config:
+        from_attributes = True

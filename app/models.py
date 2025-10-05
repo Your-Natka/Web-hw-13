@@ -1,37 +1,29 @@
-from sqlalchemy import Column, Integer, String, Boolean, Date, ForeignKey
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey
 from sqlalchemy.orm import relationship
-from app.database import Base  # Base з database.py
+from app.database import Base
+from datetime import datetime
 
-# Таблиця для зберігання товарів
-class Item(Base):
-    __tablename__ = "items"
-
-    id = Column(Integer, primary_key=True, index=True)
-    title = Column(String(255), nullable=False, index=True)
-    description = Column(String(500), nullable=True, index=True)
-    
-# Таблиця для зберігання користувачів
 class User(Base):
     __tablename__ = "users"
 
     id = Column(Integer, primary_key=True, index=True)
-    email = Column(String(255), unique=True, nullable=False, index=True)
-    hashed_password = Column(String, nullable=False)
+    email = Column(String(100), unique=True, index=True, nullable=False)
+    password = Column(String(255), nullable=False)  # храним хеш
+    username = Column(String(50), unique=True, index=True, nullable=True)
     is_verified = Column(Boolean, default=False)
-    avatar_url = Column(String, nullable=True)
+    avatar_url = Column(String(255), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
 
     contacts = relationship("Contact", back_populates="owner", cascade="all, delete-orphan")
 
-# Таблиця для зберігання контактів
+
 class Contact(Base):
     __tablename__ = "contacts"
 
     id = Column(Integer, primary_key=True, index=True)
-    first_name = Column(String(50), nullable=False)
-    last_name = Column(String(50), nullable=False)
-    email = Column(String(255), nullable=True)
+    name = Column(String(100), nullable=False)
+    email = Column(String(100), nullable=False)
     phone = Column(String(20), nullable=True)
-    birthday = Column(Date, nullable=True)
-    additional_info = Column(String(500), nullable=True)
-    owner_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    address = Column(String(255), nullable=True)
+    owner_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     owner = relationship("User", back_populates="contacts")

@@ -1,122 +1,72 @@
-from datetime import date, timedelta
 from sqlalchemy.orm import Session
-from sqlalchemy.exc import IntegrityError
-from fastapi import HTTPException
-from app import models, schemas
+from typing import List, Optional
 from passlib.context import CryptContext
+from app import models, schemas
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-# --- USERS ---
-def get_user_by_email(db: Session, email: str):
+# ---------- Users ----------
+def get_user_by_email(db: Session, email: str) -> Optional[models.User]:
     return db.query(models.User).filter(models.User.email == email).first()
 
-def get_user(db: Session, user_id: int):
+def get_user_by_id(db: Session, user_id: int) -> Optional[models.User]:
     return db.query(models.User).filter(models.User.id == user_id).first()
 
-def create_user(db: Session, user_in: schemas.UserCreate):
-    hashed = pwd_context.hash(user_in.password)
-    db_user = models.User(email=user_in.email, hashed_password=hashed)
+def get_password_hash(password: str) -> str:
+    return pwd_context.hash(password)
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    return pwd_context.verify(plain_password, hashed_password)
+
+def create_user(db: Session, email: str, hashed_password: str, username: Optional[str] = None) -> models.User:
+    db_user = models.User(email=email, password=hashed_password[:72], username=username)
     db.add(db_user)
     db.commit()
     db.refresh(db_user)
     return db_user
 
-def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return pwd_context.verify(plain_password, hashed_password)
-
-# --- ITEMS ---
-def create_item(db: Session, item: schemas.ItemCreate):
-    db_item = models.Item(**item.dict())
-    db.add(db_item)
+def update_user_password(db: Session, user: models.User, new_password: str) -> models.User:
+    user.password = get_password_hash(new_password)
     db.commit()
-    db.refresh(db_item)
-    return db_item
+    db.refresh(user)
+    return user
 
+def update_user_avatar(db: Session, user: models.User, avatar_url: str) -> models.User:
+    user.avatar_url = avatar_url
+    db.commit()
+    db.refresh(user)
+    return user
 
-def get_item(db: Session, item_id: int):
-    return db.query(models.Item).filter(models.Item.id == item_id).first()
+def verify_user_email(db: Session, user: models.User) -> models.User:
+    user.is_verified = True
+    db.commit()
+    db.refresh(user)
+    return user
 
-
-def get_items(db: Session, skip: int = 0, limit: int = 10):
-    return db.query(models.Item).offset(skip).limit(limit).all()
-
-
-# --- CONTACTS ---
-def create_contact(db: Session, contact: schemas.ContactCreate):
-    db_contact = models.Contact(**contact.dict())
+# ---------- Contacts ----------
+def create_contact(db: Session, contact_in: schemas.ContactCreate, user_id: int) -> models.Contact:
+    db_contact = models.Contact(**contact_in.dict(), owner_id=user_id)
     db.add(db_contact)
-    try:
-        db.commit()
-    except IntegrityError:
-        db.rollback()
-        raise HTTPException(status_code=400, detail="Phone or email already exists")
-    db.refresh(db_contact)
-    return db_contact
-
-
-def get_contacts(db: Session, skip: int = 0, limit: int = 10):
-    return db.query(models.Contact).offset(skip).limit(limit).all()
-
-
-def get_contact(db: Session, contact_id: int):
-    return db.query(models.Contact).filter(models.Contact.id == contact_id).first()
-
-
-# --- UPDATE CONTACT ---
-def update_contact_full(db: Session, contact_id: int, contact_in: schemas.ContactCreate):
-    """PUT — повне оновлення (усі поля обов’язкові)"""
-    db_contact = get_contact(db, contact_id)
-    if not db_contact:
-        return None
-    for key, value in contact_in.dict().items():
-        setattr(db_contact, key, value)
-    try:
-        db.commit()
-    except IntegrityError:
-        db.rollback()
-        raise HTTPException(status_code=400, detail="Phone or email already exists")
-    db.refresh(db_contact)
-    return db_contact
-
-
-def update_contact_partial(db: Session, contact_id: int, contact_in: schemas.ContactUpdate):
-    """PATCH — часткове оновлення (тільки передані поля)"""
-    db_contact = get_contact(db, contact_id)
-    if not db_contact:
-        return None
-    for key, value in contact_in.dict(exclude_unset=True).items():
-        setattr(db_contact, key, value)
-    try:
-        db.commit()
-    except IntegrityError:
-        db.rollback()
-        raise HTTPException(status_code=400, detail="Phone or email already exists")
-    db.refresh(db_contact)
-    return db_contact
-
-
-def delete_contact(db: Session, contact_id: int):
-    db_contact = get_contact(db, contact_id)
-    if not db_contact:
-        return False
-    db.delete(db_contact)
     db.commit()
-    return True
+    db.refresh(db_contact)
+    return db_contact
 
+def get_contacts(db: Session, user_id: int) -> List[models.Contact]:
+    return db.query(models.Contact).filter(models.Contact.owner_id == user_id).all()
 
-def contacts_with_birthdays_next_days(db: Session, days: int = 7):
-    today = date.today()
-    end_date = today + timedelta(days=days)
+def get_contact(db: Session, contact_id: int, user_id: int) -> Optional[models.Contact]:
+    return db.query(models.Contact).filter(
+        models.Contact.id == contact_id,
+        models.Contact.owner_id == user_id
+    ).first()
 
-    contacts = db.query(models.Contact).all()
-    result = []
+def update_contact(db: Session, contact: models.Contact, updates: schemas.ContactUpdate) -> models.Contact:
+    for k, v in updates.dict(exclude_unset=True).items():
+        setattr(contact, k, v)
+    db.commit()
+    db.refresh(contact)
+    return contact
 
-    for contact in contacts:
-        if contact.birthday:
-            birthday_this_year = contact.birthday.replace(year=today.year)
-            if today <= birthday_this_year <= end_date:
-                result.append(contact)
-
-    return result
-
+def delete_contact(db: Session, contact: models.Contact) -> None:
+    db.delete(contact)
+    db.commit()
